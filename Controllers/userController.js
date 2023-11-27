@@ -1,7 +1,8 @@
 const User = require('../Models/User');
+const shuffleArray = require('../Utils/shuffleArray.js');
 
 
-/*-------------------------------POST APIS-------------------------------*/
+/*-------------------------------POST Controllers-------------------------------*/
 
 
 const followUserController = async function (req , res) {
@@ -9,39 +10,114 @@ const followUserController = async function (req , res) {
 		const me = req.user._id;
 		const user = req.params.userID;
 
-		const myAccount = await User.findOne({_id : me});
-		if (!myAccount) {
-			throw new Error('Error while fetching your account');
-		} 
-		const iWantToFollow = await User.findOne({_id : user});
-		
-		myAccount.followings.set(user.toString() , user);
-		iWantToFollow.followers.set(me.toString() , me);
+		const userAccount = await User.findOne({_id : user});
+		if (userAccount.isPublic) {
+			const myAccount = req.user;
+			if (!myAccount) {
+				throw new Error('Error while fetching your account');
+			} 
+			const iWantToFollow = await User.findOne({_id : user});
+			
+			myAccount.followings.set(user.toString() , user);
+			iWantToFollow.followers.set(me.toString() , me);
 
-		await myAccount.save();
-		await iWantToFollow.save();
+			await myAccount.save();
+			await iWantToFollow.save();
 
-		return res.status(200).send({
-			success : true,
-			message : 'Now you are following the user : ' + iWantToFollow.username,
-			yourFollowings : myAccount.followings,
-			usersFollowers : iWantToFollow.followers
-		});
+			return res.status(200).send({
+				success : true,
+				message : 'Now you are following the user : ' + iWantToFollow.username,
+				yourFollowings : myAccount.followings,
+				usersFollowers : iWantToFollow.followers
+			});
+		} else {
+			if (userAccount.followRequests.includes(req.user.username)) {
+				return res.status(400).send({
+					success : true,
+					message : 'You have already sent the follow request to ' + userAccount.username
+				});
+			}
+			userAccount.followRequests.push(req.user.username);
+			await userAccount.save();
+			return res.status(200).send({
+				success : true,
+				message : 'Your follow request has been sent to ' + userAccount.username
+			});
+		}
 	} catch (error) {
+		console.log(error);
 		return res.status(500).send({
 			success : false,
 			message : 'Error in followUserController Public API',
 			error : error.message
-		})
+		});
 	}
 };
+
+
+const approveFollowRequestsController = async function (req , res) {
+	try {
+		const me = req.user;
+		const myId = req.user._id;
+		const followRequests = me.followRequests;
+		const user = followRequests[followRequests.length - 1];
+		followRequests.pop();
+
+		const userProfile = await User.findOne({username : user});
+		const userId = userProfile._id;
+		
+		me.followers.set(userId.toString() , userId);
+		me.followRequests = followRequests;
+		await me.save();
+
+		userProfile.followings.set(myId.toString() , myId);
+		await userProfile.save();
+
+		return res.status(200).send({
+			success : true,
+			message : user + ' started following you'
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in approveFollowRequestsController Public API',
+			error : error.message
+		});
+	}
+};
+
+
+const rejectFollowRequestsController = async function (req , res) {
+	try {
+		const me = req.user;
+		const myId = req.user._id;
+		const followRequests = me.followRequests;
+		const user = followRequests[followRequests.length - 1];
+		followRequests.pop();
+		
+		me.followRequests = followRequests;
+		await me.save();
+
+		return res.status(200).send({
+			success : true,
+			message : 'Follow request of ' + user + ' has been successfully rejected'
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in rejectFollowRequestsController Public API',
+			error : error.message
+		});
+	}
+};
+
 
 const unfollowUserController = async function (req , res) {
 	try {
 		const me = req.user._id;
 		const user = req.params.userID;
 
-		const myAccount = await User.findById({_id : me});
+		const myAccount = req.user;
 		if (!me) {
 			throw new Error('Error while fetching your account');
 		}
@@ -55,7 +131,7 @@ const unfollowUserController = async function (req , res) {
 		return res.status(200).send({
 			success : true,
 			message : 'You are now not following the user : ' + iWantToUnfollow.username
-		})
+		});
 
 	} catch (error) {
 		return res.status(500).send({
@@ -69,7 +145,7 @@ const unfollowUserController = async function (req , res) {
 
 const disableAccountController = async function (req , res) {
 	try {
-		const id = req.params.userID;
+		const id = req.user._id;
 		const user = await User.findById({_id : id});
 		if (user.isAccountDisabled) {
 			return res.status(400).send({
@@ -82,7 +158,7 @@ const disableAccountController = async function (req , res) {
 		return res.status(200).send({
 			success : true,
 			message : 'Your account has been disabled successfully'
-		})
+		});
 
 	} catch (error) {
 		return res.status(500).send({
@@ -96,7 +172,7 @@ const disableAccountController = async function (req , res) {
 
 const enableAccountController = async function (req , res) {
 	try {
-		const id = req.params.userID;
+		const id = req.user._id;
 		const user = await User.findById({_id : id});
 		if (!user.isAccountDisabled) {
 			return res.status(400).send({
@@ -166,15 +242,16 @@ const blockUserController = async function (req , res) {
 		return res.status(200).send({
 			success : true,
 			message : user.username + ' blocked successfully'
-		})
+		});
 	} catch (error) {
 		return res.status(500).send({
 			success : false,
 			message : 'Error in blockUserController Public API',
 			error : error.message
-		})
+		});
 	}
 };
+
 
 const unblockUserController = async function (req , res) {
 	try {
@@ -205,14 +282,15 @@ const unblockUserController = async function (req , res) {
 			success : false,
 			message : 'Error in unblockUserController Public API',
 			error : error.message
-		})
+		});
 	}
 };
 
 
-/*--------------------------------GET APIS-------------------------------*/
+/*--------------------------------GET Controllers-------------------------------*/
 
 
+// TODO : populate posts when the postschema is populated for the first time (Developer's mistake)
 const viewProfileController = async function (req , res) {
 	try {
 		let userId = req.params.userID;
@@ -221,13 +299,24 @@ const viewProfileController = async function (req , res) {
 
 		if (userId) {
 			const user = await User.findOne({_id : userId}); 
-
 			if (!user || user.isAccountDisabled === true || user.blockList.includes(req.user._id) || myAccount.blockList.includes(user._id)) {
 				return res.status(404).send({
 					success : false,
 					message : 'User not found'
 				});
 			}
+
+			if (!user.isPublic) {
+				return res.status(200).send({
+					success : true,
+					message : 'Private profile, Follow this profile to see their posts',
+					username : user.username,
+					bio : user.bio,
+					followers : user.followers.size,
+					followings : user.followings.size
+				});
+			}
+
 			return res.status(200).send({
 				success : true,
 				message : 'User profile fetched successfully',
@@ -241,13 +330,26 @@ const viewProfileController = async function (req , res) {
 			});
 		} 
 		const user = await User.findOne({username});
-
+		
 		if (!user || user.isAccountDisabled === true || user.blockList.includes(req.user._id) || myAccount.blockList.includes(user._id)) {
 			return res.status(404).send({
 				success : false,
 				message : 'User not found'
 			});
 		}
+		
+		if (!user.isPublic) {
+			return res.status(200).send({
+				success : true,
+				message : 'Private profile, follow this profile to see their posts',
+				username : user.username,
+				fullName : user.fullName,
+				bio : user.bio,
+				followers : user.followers.size,
+				followings : user.followings.size
+			});
+		}
+
 		return res.status(200).send({
 			success : true,
 			message : 'User profile fetched successfully',
@@ -266,7 +368,7 @@ const viewProfileController = async function (req , res) {
 			success : false,
 			message : 'Error in viewProfileController Public API',
 			error : error.message
-		})
+		});
 	}
 };
 
@@ -279,6 +381,17 @@ const viewFollowingsController = async function (req , res) {
 			return res.status(404).send({
 				success : false,
 				message : 'User not found'
+			});
+		}
+		if (!user.isPublic) {
+			return res.status(200).send({
+				success : true,
+				message : 'Private profile, follow this profile to see their posts',
+				username : user.username,
+				fullName : user.fullName,
+				bio : user.bio,
+				followers : user.followers.size,
+				followings : user.followings.size
 			});
 		}
 		const followings = user.followings;
@@ -307,6 +420,17 @@ const viewFollowersController = async function (req , res) {
 				message : 'User not found'
 			});
 		}
+		if (!user.isPublic) {
+			return res.status(200).send({
+				success : true,
+				message : 'Private profile, follow this profile to see their posts',
+				username : user.username,
+				fullName : user.fullName,
+				bio : user.bio,
+				followers : user.followers.size,
+				followings : user.followings.size
+			});
+		}
 		const followers = user.followers;
 		return res.status(200).send({
 			success : true,
@@ -323,14 +447,152 @@ const viewFollowersController = async function (req , res) {
 };
 
 
-/*--------------------------------PUT APIS-------------------------------*/
+const viewFollowRequestsController = async function (req , res) {
+	try {
+		return res.status(200).send({
+			success : true,
+			message : 'Follow requests fetched successfully',
+			followRequests : req.user.followRequests
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : true,
+			message : 'Error in viewFollowersController Public API',
+			error : error.message
+		});
+	}
+};
 
 
-// TODO : Implement editProfileController
+const getMutualAccountsController = async function (req , res) {
+	try {
+		const me = req.user;
+		const followings = req.user.followings;
+		let mutualsSet = new Set();
+
+		const limit = 15;
+
+		const q = [[me._id , 0]];
+		const vis = new Set();
+		vis.add(me._id);
+
+		// BFS (Breadth First Search starts)
+		while (q.length) {
+			const front = q.shift();
+			const node = front[0];
+			const lvl = front[1];
+
+			if (lvl === 2) {
+				mutualsSet.add(node);
+			}
+			if (mutualsSet.size >= limit) {
+				break;
+			}
+			if (lvl > 2) {
+				break;
+			}
+
+			const childsMap = await User.findOne({_id : node});
+			let childs = Array.from(childsMap.followings.keys());
+			childs = shuffleArray(childs);
+
+			for (const child of childs) {
+				if (vis.has(child)) {
+					continue;
+				}
+				vis.add(child);
+				q.push([child , lvl + 1]);
+			}
+		}
+
+		let mutuals = [...mutualsSet];
+		let mutualFriends = await User.find({_id : {
+			$in : mutuals
+		}} , {
+			username : 1,
+			fullName : 1,
+			_id : 1,
+			email : 1,
+			followings : 1,
+			followers : 1,
+			bio : 1,
+			isPublic : 1
+		});
+
+		return res.status(200).send({
+			success : true,
+			message : 'Mutuals fetched',
+			size : mutualFriends.length,
+			mutualFriends : mutualFriends
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in getMutualAccountsController Public API',
+			error : error.message
+		});
+	}
+};
+
+
+/*--------------------------------PUT Controllers-------------------------------*/
+
+
 const editProfileController = async function (req , res) {
 	try {
+		const me = req.user;
+		const {username , bio} = req.body; 
 
-	} catch (error) {
+		if (username && bio) {
+			if (username.trim() === '') {
+				return res.status(400).send({
+					success : false,
+					message : 'username cannot be empty'
+				});
+			}
+
+			if (bio.length) {
+				me.bio = bio;
+			}
+			const usernameTaken = await User.findOne({username});
+			if (usernameTaken) {
+				return res.status(400).send({
+					success : false,
+					message : username + ' already been taken, try another username'
+				})
+			}
+			me.username = username;
+			await me.save();
+
+		} else if (username) {
+			if (username.trim() === '') {
+				return res.status(400).send({
+					success : false,
+					message : 'username cannot be empty'
+				});
+			}
+
+			const usernameTaken = await User.findOne({username});
+			if (usernameTaken) {
+				return res.status(400).send({
+					success : false,
+					message : username + ' already been taken, try another username'
+				})
+			}
+			me.username = username;
+			await me.save();
+
+		} else if (bio && bio.length) {
+			me.bio = bio;
+			await me.save();
+		}
+		return res.status(200).send({
+			success : true,
+			message : 'Profile edited successfully',
+			username : me.username,
+			bio : me.bio
+		});
+ 	} catch (error) {
 		return res.status(500).send({
 			success : false,
 			message : 'Error in editProfileController Public API',
@@ -339,22 +601,6 @@ const editProfileController = async function (req , res) {
 	}
 };
 
-
-/*--------------------------------PUT APIS-------------------------------*/
-
-
-// TODO : Implement deleteProfileController
-const deleteProfileController = async function (req , res) {
-	try {
-
-	} catch (error) {
-		return res.status(500).send({
-			success : false,
-			message : 'Error in deleteProfileController Public API',
-			error : error.message
-		});
-	}
-};
 
 module.exports = {
 	followUserController,
@@ -365,5 +611,10 @@ module.exports = {
 	unblockUserController,
 	viewProfileController,
 	viewFollowingsController,
-	viewFollowersController
+	viewFollowersController,
+	editProfileController,
+	approveFollowRequestsController,
+	rejectFollowRequestsController,
+	viewFollowRequestsController,
+	getMutualAccountsController
 }

@@ -65,6 +65,14 @@ const userModel = new mongoose.Schema({
 		},
 		default : []
 	},
+	isPublic : {
+		type : Boolean,
+		default : true
+	},
+	followRequests : {
+		type : Array,
+		of : String
+	},
 	tokens : [{type : Object}]
 } , {timestamp : true});
  

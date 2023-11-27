@@ -9,16 +9,23 @@ const {
 	unblockUserController,
 	viewProfileController,
 	viewFollowingsController,
-	viewFollowersController
+	viewFollowersController,
+	editProfileController,
+	approveFollowRequestsController,
+	rejectFollowRequestsController,
+	viewFollowRequestsController,
+	getMutualAccountsController
 } = require('../Controllers/userController');
 
-/*-------------------------------POST APIS-------------------------------*/
+
+/*-------------------------------POST APIs-------------------------------*/
 
 
 /*
 	@desc : Follows the user with id 'userID'
 	@API : Protected Public
 	@method : post
+	@note : If the account is private then the request is pushed into the stack of the followRequests of the user
 */
 router.post('/follow/:userID' , isAuth , followUserController);
 
@@ -32,19 +39,19 @@ router.post('/unfollow/:userID' , isAuth , unfollowUserController);
 
 
 /*
-	@desc : Disables the account of the user with id 'userID'
+	@desc : Disables the account of the logged in user
 	@API : Protected Public
 	@method : post
 */
-router.post('/account/disable/:userID' , isAuth , disableAccountController);
+router.post('/account/disable' , isAuth , disableAccountController);
 
 
 /*
-	@desc : Enables the account of the user with id 'userID'
+	@desc : Enables the account of the logged in user
 	@API : Protected Public
 	@method : post
 */
-router.post('/account/enable/:userID' , isAuth , enableAccountController);
+router.post('/account/enable' , isAuth , enableAccountController);
 
 
 /*
@@ -63,7 +70,23 @@ router.post('/block/:userID' , isAuth , blockUserController);
 router.post('/unblock/:userID' , isAuth , unblockUserController);
 
 
-/*--------------------------------GET APIS-------------------------------*/
+/*
+	@desc :  Approves the follow requests
+	@API : Protected Public
+	@method : post
+*/
+router.post('/follow/requests/approve' , isAuth , approveFollowRequestsController);
+
+
+/*
+	@desc :  Rejects the follow requests
+	@API : Protected Public
+	@method : post
+*/
+router.post('/follow/requests/reject' , isAuth , rejectFollowRequestsController);
+
+
+/*--------------------------------GET APIs-------------------------------*/
 
 
 /*
@@ -96,6 +119,33 @@ router.get('/profile/followings/:userID' , isAuth , viewFollowingsController);
 	@method : get
 */
 router.get('/profile/followers/:userID' , isAuth , viewFollowersController);
+
+
+/*
+	@desc : Gets the followerRequests of the user
+	@API : Protected Public
+	@method : get
+*/
+router.get('/account/follow-requests' , isAuth , viewFollowRequestsController);
+
+
+/*
+	@desc : Gets the mutual friends of a user randomly
+	@API : Protected Public
+	@method : get
+*/
+router.get('/account/mutuals' , isAuth , getMutualAccountsController);
+
+
+/*--------------------------------PUT APIs-------------------------------*/
+
+
+/*
+	@desc : Edits the profile of the user
+	@API : Protected Public
+	@method : put
+*/
+router.put('/account/edit' , isAuth , editProfileController);
 
 
 module.exports = router;

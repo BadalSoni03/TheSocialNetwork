@@ -2,7 +2,7 @@ const User = require('../Models/User');
 const JWT = require('jsonwebtoken');
 
 
-/*-------------------------------POST APIS-------------------------------*/
+/*-------------------------------POST Controllers-------------------------------*/
 
 
 // TODO : Add cloudinary middleware for profile pics

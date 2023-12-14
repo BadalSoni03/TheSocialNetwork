@@ -1,11 +1,11 @@
 const User = require('../Models/User');
 const JWT = require('jsonwebtoken');
+const cloudinary = require('../Utils/imageUpload');
 
 
 /*-------------------------------POST Controllers-------------------------------*/
 
 
-// TODO : Add cloudinary middleware for profile pics
 const registerController = async function (req , res) {
 	try {
 		const {
@@ -15,19 +15,40 @@ const registerController = async function (req , res) {
 			password,
 			bio
 		} = req.body;
+
 		const userName = await User.findOne({username});
 		const userEmail = await User.findOne({email});
 		if (userName || userEmail) {
 			throw new Error('Username / userEmail already taken');
 		}
-		const newUser = await User(req.body);
+
+		const newUser = await User({
+			username,
+			fullName,
+			email,
+			password,
+			bio
+		});
+
+		const pic = req.files.profilePhoto;
+
+		if (pic) {
+			const result = await cloudinary.uploader.upload(pic.tempFilePath , {
+				public_id : newUser._id + '_profile'
+			});
+			newUser.profilePhoto.public_id = result.public_id;
+			newUser.profilePhoto.url = result.secure_url;
+		}
+
 		await newUser.save();
+
 		return res.status(201).send({
 			success : true,
 			message : 'User registered successfully',
 			newUser
 		});
 	} catch (error) {
+		console.log(error);
 		return res.status(500).send({
 			success : false,
 			message : 'Error in registerController Public API',

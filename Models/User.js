@@ -24,7 +24,8 @@ const userModel = new mongoose.Schema({
 		required : true
 	},
 	profilePhoto : {
-		type : String
+		public_id : String,
+		url : String
 	},
 	bio : {
 		type : String,
@@ -72,6 +73,14 @@ const userModel = new mongoose.Schema({
 	followRequests : {
 		type : Array,
 		of : String
+	},
+	mutedUsers : {
+		type : Array,
+		of : {
+			type : 'ObjectId',
+			ref : 'User'
+		},
+		default : []
 	},
 	tokens : [{type : Object}]
 } , {timestamp : true});

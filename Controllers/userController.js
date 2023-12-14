@@ -1,5 +1,6 @@
 const User = require('../Models/User');
 const shuffleArray = require('../Utils/shuffleArray.js');
+const cloudinary = require('../Utils/imageUpload');
 
 
 /*-------------------------------POST Controllers-------------------------------*/
@@ -9,6 +10,13 @@ const followUserController = async function (req , res) {
 	try {
 		const me = req.user._id;
 		const user = req.params.userID;
+
+		if (me.toString() === user) {
+			return res.status(400).send({
+				success : false,
+				message : 'You are not allowed to follow yourself'
+			});
+		}
 
 		const userAccount = await User.findOne({_id : user});
 		if (userAccount.isPublic) {
@@ -143,63 +151,17 @@ const unfollowUserController = async function (req , res) {
 };
 
 
-const disableAccountController = async function (req , res) {
-	try {
-		const id = req.user._id;
-		const user = await User.findById({_id : id});
-		if (user.isAccountDisabled) {
-			return res.status(400).send({
-				success : false,
-				message : 'Your account has already been disabled'
-			});
-		}
-		user.isAccountDisabled = true;
-		await user.save();
-		return res.status(200).send({
-			success : true,
-			message : 'Your account has been disabled successfully'
-		});
-
-	} catch (error) {
-		return res.status(500).send({
-			success : false,
-			message : 'Error in disableAccountController Public API',
-			error : error.message
-		});
-	}
-};
-
-
-const enableAccountController = async function (req , res) {
-	try {
-		const id = req.user._id;
-		const user = await User.findById({_id : id});
-		if (!user.isAccountDisabled) {
-			return res.status(400).send({
-				success : false,
-				message : 'Your account is already enabled'
-			})
-		}
-		user.isAccountDisabled = false;
-		await user.save();
-		return res.status(200).send({
-			success : true,
-			message : 'Your account has been reactivated successfully'
-		});
-	} catch (error) {
-		return res.status(500).send({
-			success : false,
-			message : 'Error in enableAccountController Public API',
-			error : error.message
-		});
-	}
-};
-
-
 const blockUserController = async function (req , res) {
 	try {
 		const userID = req.params.userID;
 		const me = req.user;
+
+		if (userID === me._id) {
+			return res.status(400).send({
+				success : false,
+				message : 'You cannot block yourself'
+			});
+		}
 		
 		let myFollowings = me.followings;
 		let myFollowers = me.followers;
@@ -287,10 +249,127 @@ const unblockUserController = async function (req , res) {
 };
 
 
+const removeFollowerController = async function (req , res) {
+	try {
+		const userID = req.params.userID;
+		const me = req.user;
+		const myFollowers = me.followers;
+
+		const user = await User.findById({_id : userID});
+		const userFollowings = user.followings;
+		
+		if (!myFollowers.has(userID)) {
+			return res.status(400).send({
+				success : false,
+				message : 'User not found in your followers'
+			});
+		}
+
+		const myId = me._id.toString();
+
+		userFollowings.delete(myId);
+		user.followings = userFollowings;
+
+		myFollowers.delete(userID);
+		me.followers = myFollowers;
+		
+		await user.save();
+		await me.save();
+
+		return res.status(200).send({
+			success : true,
+			message : 'User successfully removed from your followers'
+		});
+
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in removeFollowerController Public API',
+			error : error.message
+		});
+	}
+};
+
+
+const muteUserController = async function (req , res) {
+	try {	
+		const userID = req.params.userID;
+		const me = req.user;
+
+		if (userID === me._id.toString()) {
+			return res.status(400).send({
+				success : false,
+				message : 'You cannot mute yourself'
+			});
+		}
+
+		const mutedByMe = me.mutedUsers;
+
+		if (mutedByMe.includes(userID)) {
+			return res.status(400).send({
+				success : false,
+				message : 'Already muted'
+			});
+		}
+
+		mutedByMe.push(userID);
+		me.mutedUsers = mutedByMe;
+		await me.save();
+
+		return res.status(200).send({
+			success : true,
+			message : 'muted successfully'
+		});
+
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in muteUserController Public API',
+			error : error.message
+		});
+	}
+};
+
+
+const unmuteUserController = async function (req , res) {
+	try {
+		const userID = req.params.userID;
+		const me = req.user;
+		let mutedByMe = me.mutedUsers;
+
+		console.log(mutedByMe);
+
+		if (!mutedByMe.includes(userID)) {
+			return res.status(400).send({
+				success : false,
+				message : 'Not muted by you'
+			});
+		}
+
+		mutedByMe = mutedByMe.filter(id => {
+			return id.toString() !== userID;
+		});
+
+		me.mutedUsers = mutedByMe;
+		await me.save();
+
+		return res.status(200).send({
+			success : true,
+			message : 'unmuted successfully'
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : true,
+			message : 'Error in unmuteUserController Public API',
+			error : error.message
+		});
+	}
+};
+
+
 /*--------------------------------GET Controllers-------------------------------*/
 
 
-// TODO : populate posts when the postschema is populated for the first time (Developer's mistake)
 const viewProfileController = async function (req , res) {
 	try {
 		let userId = req.params.userID;
@@ -298,7 +377,7 @@ const viewProfileController = async function (req , res) {
 		const myAccount = req.user;
 
 		if (userId) {
-			const user = await User.findOne({_id : userId}); 
+			const user = await User.findOne({_id : userId}).populate('posts'); 
 			if (!user || user.isAccountDisabled === true || user.blockList.includes(req.user._id) || myAccount.blockList.includes(user._id)) {
 				return res.status(404).send({
 					success : false,
@@ -313,7 +392,8 @@ const viewProfileController = async function (req , res) {
 					username : user.username,
 					bio : user.bio,
 					followers : user.followers.size,
-					followings : user.followings.size
+					followings : user.followings.size,
+					posts : user.posts
 				});
 			}
 
@@ -329,7 +409,7 @@ const viewProfileController = async function (req , res) {
 				_id : user._id
 			});
 		} 
-		const user = await User.findOne({username});
+		const user = await User.findOne({username}).populate('posts');
 		
 		if (!user || user.isAccountDisabled === true || user.blockList.includes(req.user._id) || myAccount.blockList.includes(user._id)) {
 			return res.status(404).send({
@@ -346,7 +426,8 @@ const viewProfileController = async function (req , res) {
 				fullName : user.fullName,
 				bio : user.bio,
 				followers : user.followers.size,
-				followings : user.followings.size
+				followings : user.followings.size,
+				posts : user.posts
 			});
 		}
 
@@ -476,7 +557,6 @@ const getMutualAccountsController = async function (req , res) {
 		const vis = new Set();
 		vis.add(me._id);
 
-		// BFS (Breadth First Search starts)
 		while (q.length) {
 			const front = q.shift();
 			const node = front[0];
@@ -535,7 +615,85 @@ const getMutualAccountsController = async function (req , res) {
 };
 
 
-/*--------------------------------PUT Controllers-------------------------------*/
+const getMutedUsersController = async function (req , res) {
+	try {
+		const mutedAccountsLists = req.user.mutedUsers;
+		const mutedUsers = await User.find({_id : {
+			$in : mutedAccountsLists
+		}} , {
+			_id : 1,
+			username : 1,
+			fullName : 1
+		});
+
+		return res.status(200).send({
+			success : true,
+			mutedAccounts : mutedUsers			
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : true,
+			message : 'Error in getMutedUsersController Public API',
+			error : error.message
+		});
+	}
+};
+
+
+/*--------------------------------PATCH Controllers-------------------------------*/
+
+
+const disableAccountController = async function (req , res) {
+	try {
+		const id = req.user._id;
+		const user = await User.findById({_id : id});
+		if (user.isAccountDisabled) {
+			return res.status(400).send({
+				success : false,
+				message : 'Your account has already been disabled'
+			});
+		}
+		user.isAccountDisabled = true;
+		await user.save();
+		return res.status(200).send({
+			success : true,
+			message : 'Your account has been disabled successfully'
+		});
+
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in disableAccountController Public API',
+			error : error.message
+		});
+	}
+};
+
+
+const enableAccountController = async function (req , res) {
+	try {
+		const id = req.user._id;
+		const user = await User.findById({_id : id});
+		if (!user.isAccountDisabled) {
+			return res.status(400).send({
+				success : false,
+				message : 'Your account is already enabled'
+			})
+		}
+		user.isAccountDisabled = false;
+		await user.save();
+		return res.status(200).send({
+			success : true,
+			message : 'Your account has been reactivated successfully'
+		});
+	} catch (error) {
+		return res.status(500).send({
+			success : false,
+			message : 'Error in enableAccountController Public API',
+			error : error.message
+		});
+	}
+};
 
 
 const editProfileController = async function (req , res) {
@@ -601,6 +759,35 @@ const editProfileController = async function (req , res) {
 	}
 };
 
+const editProfilePicController = async function (req , res) {
+	try {
+		const pic = req.files.profilePhoto;
+
+		const me = req.user;
+		const result = await cloudinary.uploader.upload(pic.tempFilePath , {
+			public_id : me._id + '_profile'
+		});
+
+		me.profilePhoto.public_id = result.public_id;
+		me.profilePhoto.url = result.secure_url;
+
+		await me.save();
+
+		return res.status(200).send({
+			success : true,
+			url : result.secure_url
+		});
+
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({
+			success : false,
+			message : 'Error in editProfilePicController Public API',
+			error : error.message
+		});
+	}
+}
+
 
 module.exports = {
 	followUserController,
@@ -616,5 +803,10 @@ module.exports = {
 	approveFollowRequestsController,
 	rejectFollowRequestsController,
 	viewFollowRequestsController,
-	getMutualAccountsController
+	getMutualAccountsController,
+	removeFollowerController,
+	muteUserController,
+	getMutedUsersController,
+	unmuteUserController,
+	editProfilePicController
 }

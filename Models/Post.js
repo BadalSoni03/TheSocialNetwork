@@ -1,30 +1,29 @@
 const mongoose = require('mongoose');
 
 const postModel = new mongoose.Schema({
-	post : [{
-		type : String,
-		required : true
+	postMedia : [{
+		public_id : String,
+		url : String
 	}],
-	postType : {
-		type : String,
-		required : true
-	},
 	postedBy : {
 		type : mongoose.Types.ObjectId,
 		ref : 'User',
 		required : true
 	},
-	likes : {
+	likes : [{
 		type : mongoose.Types.ObjectId,
 		ref : 'User'
-	},
+	}],
 	caption : {
-		type : String,
-		required : true
+		type : String
 	},
 	comments : [{
 		type : mongoose.Types.ObjectId,
 		ref : 'Comment'
+	}],
+	tags : [{
+		type : mongoose.Types.ObjectId,
+		ref : 'User'
 	}]
 } , {timestamp : true})
 
